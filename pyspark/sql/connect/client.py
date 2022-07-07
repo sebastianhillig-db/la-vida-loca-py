@@ -1,5 +1,6 @@
+import time
 import pyspark.sql.connect.proto.spark_connect_pb2 as pb2
-
+from js import XMLHttpRequest, Blob, Uint8Array
 # Depending on the platform we have different libraries available
 # to perform the operations.
 try:
@@ -26,8 +27,7 @@ except:
 import pandas as pd
 import io
 
-import requests
-
+from pyodide.http import pyfetch
 
 import pyspark.sql.types
 from pyspark.sql.connect.data_frame import DataFrame
@@ -36,15 +36,6 @@ from pyspark.sql.connect.plan import Read, Sql
 
 import cloudpickle
 import uuid
-
-
-class BearerAuth(requests.auth.AuthBase):
-    def __init__(self, token):
-        self.token = token
-
-    def __call__(self, r):
-        r.headers["authorization"] = "Bearer " + self.token
-        return r
 
 
 class Data:
@@ -178,8 +169,7 @@ class RemoteSparkSession(object):
                 coro = self._execute_and_fetch_async(req)
                 return asyncio.get_event_loop().run_until_complete(coro)
         else:
-            result = self._execute_and_fetch_http(req)
-        return result
+            return self._execute_and_fetch_http(req)
 
     def _process_batch(self, b):
         if b.batch is not None and len(b.batch.data) > 0:
@@ -188,13 +178,25 @@ class RemoteSparkSession(object):
         elif b.csv_batch is not None and len(b.csv_batch.data) > 0:
             return pd.read_csv(io.StringIO(b.csv_batch.data), delimiter="|")
 
+
+    def myfetch(self, url, *args, method="GET", body="", headers=[]):
+        r = XMLHttpRequest.new()
+        r.responseType = 'arraybuffer'
+        r.open("POST", url, False)
+        data = Uint8Array.new(range(len(body)))
+        data.assign(body)
+        for k, v in headers:
+            r.setRequestHeader(k, v)
+        r.send(data)
+        return r
+
     def _execute_and_fetch_http(self, req: pb2.Request):
-        r = requests.post(
-            self._http_path, data=req.SerializeToString(), auth=BearerAuth(self._token)
-        )
-        if r.status_code != 200:
-            raise RuntimeError(r.content)
-        resp = pb2.Response.FromString(r.content)
+        r = self.myfetch(self._http_path, method="POST",
+                                    body=req.SerializeToString(),
+                                    headers=[["Authorization", f"Bearer {self._token}"]])
+        if r.status != 200:
+            raise RuntimeError(r.status_text)
+        resp = pb2.Response.FromString(r.response.to_memoryview())
         pdf = self._process_batch(resp)
         pdf.attrs["metrics"] = self._build_metrics(resp.metrics)
         return pdf
