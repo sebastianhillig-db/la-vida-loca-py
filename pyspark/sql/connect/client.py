@@ -195,7 +195,7 @@ class RemoteSparkSession(object):
                                     body=req.SerializeToString(),
                                     headers=[["Authorization", f"Bearer {self._token}"]])
         if r.status != 200:
-            raise RuntimeError(r.status_text)
+            raise RuntimeError(r.response.to_bytes().decode())
         resp = pb2.Response.FromString(r.response.to_memoryview())
         pdf = self._process_batch(resp)
         pdf.attrs["metrics"] = self._build_metrics(resp.metrics)
