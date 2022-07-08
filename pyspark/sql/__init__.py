@@ -26,5 +26,5 @@ class SparkSession:
 
     def getOrCreate(self) -> "RemoteSparkSession":
         return RemoteSparkSession(
-            http_path=f"https://{self._host}{self._path}", token=f"{self._token}"
+            http_path=f"http://{self._host}{self._path}", token=f"{self._token}"
         )
